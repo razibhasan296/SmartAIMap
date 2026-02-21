@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMARTAIMAP | RAI Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --theme-primary: #22d3ee;
+        --theme-secondary: #a855f7;
+        --theme-accent: #ec4899;
+        --theme-bg: #000000;
+        --theme-accent-glow: rgba(34, 211, 238, 0.4);
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--theme-bg);
+        color: #f8fafc;
+        font-family: 'JetBrains Mono', monospace;
+        overflow: hidden;
+        transition: background-color 1s ease;
+      }
+      .font-orbitron { font-family: 'Orbitron', sans-serif; }
+      
+      /* Starlink Mesh Background */
+      body::after {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: 
+          linear-gradient(var(--theme-primary) 1px, transparent 1px),
+          linear-gradient(90deg, var(--theme-primary) 1px, transparent 1px);
+        background-size: 60px 60px;
+        z-index: -1;
+        pointer-events: none;
+        opacity: 0.08;
+        mask-image: radial-gradient(circle at center, black, transparent 80%);
+      }
+
+      .silver-mist {
+        position: fixed;
+        top: 0; left: 0; width: 200%; height: 200%;
+        background: radial-gradient(circle at center, rgba(192, 192, 192, 0.04) 0%, transparent 60%);
+        z-index: -2;
+        pointer-events: none;
+        filter: blur(60px);
+        animation: mist-move 30s infinite linear;
+      }
+
+      @keyframes mist-move {
+        0% { transform: translate(-25%, -25%) rotate(0deg); }
+        100% { transform: translate(-25%, -25%) rotate(360deg); }
+      }
+
+      .scanline {
+        width: 100%;
+        height: 2px;
+        background: var(--theme-primary);
+        opacity: 0.2;
+        position: absolute;
+        z-index: 50;
+        top: 0;
+        animation: scan 8s linear infinite;
+        pointer-events: none;
+      }
+      @keyframes scan {
+        0% { top: 0; }
+        100% { top: 100%; }
+      }
+
+      .crt::before {
+        content: " ";
+        display: block;
+        position: absolute;
+        top: 0; left: 0; bottom: 0; right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+        z-index: 100;
+        background-size: 100% 2px, 3px 100%;
+        pointer-events: none;
+      }
+
+      /* Subtle slowly moving holographic glow requested */
+      .subtle-holographic-glow {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          45deg,
+          rgba(34, 211, 238, 0.15) 0%,
+          rgba(168, 85, 247, 0.25) 50%,
+          rgba(34, 211, 238, 0.15) 100%
+        );
+        background-size: 400% 400%;
+        animation: subtle-glow-pan 15s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 15;
+        mix-blend-mode: color-dodge;
+        opacity: 0.8;
+      }
+
+      @keyframes subtle-glow-pan {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      .image-pulse-vitals {
+        animation: pulseOpacity 2s ease-in-out infinite;
+        will-change: opacity;
+      }
+
+      @keyframes pulseOpacity {
+        0%, 100% { opacity: 1.0; }
+        50% { opacity: 0.8; }
+      }
+
+      /* Enhanced Holographic Shimmer Effect */
+      .hologram-shimmer {
+        background: linear-gradient(
+          115deg,
+          transparent 0%,
+          rgba(34, 211, 238, 0.05) 30%,
+          rgba(168, 85, 247, 0.15) 50%,
+          rgba(34, 211, 238, 0.05) 70%,
+          transparent 100%
+        );
+        background-size: 300% 300%;
+        animation: holo-shimmer-move 12s linear infinite, holo-color-shift 18s ease-in-out infinite;
+        mix-blend-mode: color-dodge;
+        opacity: 0.6;
+        pointer-events: none;
+        filter: contrast(1.2) brightness(1.1);
+      }
+
+      @keyframes holo-shimmer-move {
+        0% { background-position: 100% 100%; }
+        100% { background-position: 0% 0%; }
+      }
+
+      @keyframes holo-color-shift {
+        0%, 100% { filter: hue-rotate(0deg) contrast(1.2); }
+        50% { filter: hue-rotate(30deg) contrast(1.4); }
+      }
+
+      .hologram-grid {
+        background-image: linear-gradient(var(--theme-primary) 1px, transparent 1px),
+                          linear-gradient(90deg, var(--theme-primary) 1px, transparent 1px);
+        background-size: 40px 40px;
+        opacity: 0.15;
+      }
+
+      .interactive-glow {
+        box-shadow: 0 0 8px var(--theme-accent-glow);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .interactive-glow:hover {
+        box-shadow: 0 0 15px var(--theme-primary), 0 0 30px var(--theme-accent-glow);
+        border-color: var(--theme-primary);
+        filter: brightness(1.2);
+        transform: translateY(-1px);
+        animation: pulseOpacity 2s ease-in-out infinite;
+      }
+
+      .theme-text-primary { color: var(--theme-primary); }
+      .theme-bg-primary { background-color: var(--theme-primary); }
+      .theme-border-primary { border-color: var(--theme-primary); }
+      
+      .chromatic-aberration {
+        filter: drop-shadow(1px 0px 0px rgba(255,0,0,0.5)) drop-shadow(-1px 0px 0px rgba(0,255,255,0.5));
+      }
+
+      /* Global spinning loader animation */
+      @keyframes spin-slow {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "recharts": "https://esm.sh/recharts@^3.7.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="crt">
+    <div class="silver-mist"></div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
