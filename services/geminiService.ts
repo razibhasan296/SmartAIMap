@@ -199,31 +199,25 @@ export const generateSpeech = async (text: string): Promise<string> => {
 };
 
 export const processVoiceCommand = async (transcript: string): Promise<{ action: string, target?: string }> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Interpret this voice command for the #RAI system: "${transcript}". 
-    Possible actions: 
-    - NAVIGATE: Go to a new location (e.g., "Take me to Tokyo", "Search for Mars").
-    - SELECT_MARKER: Interact with a point of interest (e.g., "Select the anomaly", "Show info for the sensor").
-    - CHANGE_STYLE: Change the visual lens (e.g., "Switch to Thermal", "Go Cyberpunk").
-    - UNKNOWN: Command not recognized.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          action: { type: Type.STRING, enum: ["NAVIGATE", "SELECT_MARKER", "CHANGE_STYLE", "UNKNOWN"] },
-          target: { type: Type.STRING, description: "The specific location, marker name, or style name mentioned." }
-        },
-        required: ["action"]
-      }
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "voice-command", prompt: transcript }),
   });
-  
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Voice command request failed.");
+  }
+
   try {
-    return JSON.parse(response.text);
-  } catch (e) {
+    const parsed = JSON.parse(typeof result.text === "string" ? result.text : "");
+    const allowedActions = ["NAVIGATE", "SELECT_MARKER", "CHANGE_STYLE", "UNKNOWN"];
+    if (!parsed || !allowedActions.includes(parsed.action)) return { action: "UNKNOWN" };
+    return {
+      action: parsed.action,
+      ...(typeof parsed.target === "string" ? { target: parsed.target.slice(0, 200) } : {}),
+    };
+  } catch {
     return { action: "UNKNOWN" };
   }
 };
