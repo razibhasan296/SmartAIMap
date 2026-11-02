@@ -8,6 +8,9 @@ const MAX_REQUESTS = 30;
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_AUDIO_BODY_BYTES = 12 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_BODY_BYTES = 17 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 12 * 1024 * 1024;
+const VIDEO_MIME_TYPES = new Set(["video/mp4", "video/mpeg", "video/mov", "video/avi", "video/x-flv", "video/mpg", "video/webm", "video/wmv", "video/3gpp"]);
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const clients = new Map();
 
@@ -100,7 +103,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, service: "smart-ai-map-api" });
   }
 
-  const supportedPostPath = ["/api/generate", "/api/audio/transcribe", "/api/audio/speech"].includes(req.url);
+  const supportedPostPath = ["/api/generate", "/api/audio/transcribe", "/api/audio/speech", "/api/video/analyze"].includes(req.url);
   if (req.method !== "POST" || !supportedPostPath) {
     return json(res, 404, { error: "Not found" });
   }
@@ -119,7 +122,42 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    const body = await readJson(req, req.url === "/api/audio/transcribe" ? MAX_AUDIO_BODY_BYTES : MAX_BODY_BYTES);
+    const bodyLimit = req.url === "/api/audio/transcribe" ? MAX_AUDIO_BODY_BYTES : req.url === "/api/video/analyze" ? MAX_VIDEO_BODY_BYTES : MAX_BODY_BYTES;
+    const body = await readJson(req, bodyLimit);
+
+    if (req.url === "/api/video/analyze") {
+      const video = body.videoBase64;
+      const mimeType = body.mimeType;
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      if (typeof mimeType !== "string" || !VIDEO_MIME_TYPES.has(mimeType)) {
+        return json(res, 400, { error: "Unsupported video MIME type." });
+      }
+      if (!prompt || prompt.length > 6000) {
+        return json(res, 400, { error: "prompt must contain 1–6000 characters." });
+      }
+      if (typeof video !== "string" || video.length < 4 || video.length > Math.ceil(MAX_VIDEO_BYTES * 4 / 3) + 4 || video.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(video)) {
+        return json(res, 400, { error: "Video must be valid base64 within the 12MB limit." });
+      }
+      const videoBytes = Buffer.from(video, "base64");
+      if (videoBytes.length < 1 || videoBytes.length > MAX_VIDEO_BYTES) {
+        return json(res, 413, { error: "Video exceeds the 12MB inline limit. Use the managed File API flow for larger videos." });
+      }
+      const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": API_KEY },
+        body: JSON.stringify({
+          model: "gemini-3.8-flash",
+          input: [
+            { type: "text", text: prompt },
+            { type: "video", data: video, mime_type: mimeType },
+          ],
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const result = await upstream.json().catch(() => ({}));
+      if (!upstream.ok) return json(res, upstream.status === 429 ? 429 : 502, { error: "Video analysis provider request failed." });
+      return json(res, 200, { text: typeof result.output_text === "string" ? result.output_text : "No analysis available." });
+    }
 
     if (req.url === "/api/audio/transcribe") {
       const audio = body.audioBase64;
