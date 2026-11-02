@@ -29,7 +29,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 - Structured extraction: `generateJsonFromPrompt` — migrated; server validates a restricted schema subset
 - Location report: `generateLocationData` — migrated to backend
 - Panorama image: `generate360View` — migrated to bounded server image endpoint
-- Video analysis: `analyzeVideo` — not migrated
+- Video analysis: `analyzeVideo` — migrated to the Interactions API; inline uploads capped at 12MB and MIME allowlisted
 - Complex reasoning: `complexReasoning` — migrated to backend
 - Audio transcription: `transcribeAudio` — migrated to an 8MB-capped WAV endpoint
 - Speech synthesis: `generateSpeech` — migrated to server-side TTS with a 6,000-character input limit
@@ -37,10 +37,17 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 - Chat: `chatWithGemini` — not migrated
 - Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
 - High-resolution image: `generateHighResImage` — migrated with server-validated size and aspect ratio
-- Veo video generation: `generateVeoVideo` — not migrated
+- Video generation: `generateVeoVideo` — not migrated; the existing Veo 3.1 Preview model was shut down on 2026-10-22. Replace it with Gemini Omni Flash (`gemini-omni-1.1-flash`) using the Interactions API before enabling video generation.
 - Codex entries: `getCodexEntries` — migrated to backend
 - Classified-code narrative: `decryptClassifiedCode` — not migrated; AI-generated narrative only, not cryptographic decryption or authorization
 
 ## Production hardening
 
 The process-local IP limiter is not suitable as a production abuse-control boundary: it resets on restart, is not shared across instances, and its client map is bounded only per process. Use a shared store and trusted-proxy-aware client identity. Add authentication/authorization, request quotas, provider spend caps, structured monitoring, and HTTPS before exposing generation endpoints publicly.
+
+
+## Video API migration notes
+
+- Short video analysis uses the Gemini Interactions API with `gemini-3.8-flash`; inline video is capped at 12MB and accepted MIME types are explicitly allowlisted.
+- Larger/longer video uploads require a separate managed File API flow; do not raise the inline request limit without revisiting the provider's request-size guidance.
+- The legacy `veo-3.1-fast-generate-preview` integration is intentionally not exposed because Veo 3.1 Preview was shut down on 2026-10-22. Video generation needs a separate migration to Gemini Omni Flash via Interactions API, including asynchronous status polling and server-controlled result retrieval.
