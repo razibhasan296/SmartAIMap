@@ -108,3 +108,21 @@ test("high-resolution image generation rejects unsupported sizes", async () => {
   });
   assert.equal(response.status, 400);
 });
+
+test("audio transcription rejects malformed base64", async () => {
+  const response = await fetch(`${baseUrl}/api/audio/transcribe`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ audioBase64: "not base64!" }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test("speech generation rejects empty text", async () => {
+  const response = await fetch(`${baseUrl}/api/audio/speech`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "   " }),
+  });
+  assert.equal(response.status, 400);
+});
