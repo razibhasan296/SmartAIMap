@@ -85,13 +85,14 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
+    const operation = body.operation === "reasoning" ? "reasoning" : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
     }
 
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -101,6 +102,7 @@ const server = http.createServer(async (req, res) => {
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 2048 },
+          ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
       },
