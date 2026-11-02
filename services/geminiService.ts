@@ -185,16 +185,16 @@ export const processVoiceCommand = async (transcript: string): Promise<{ action:
 };
 
 export const chatWithGemini = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]): Promise<string> => {
-  const ai = getGeminiClient();
-  const chat = ai.chats.create({
-    model: 'gemini-3.1-pro-preview',
-    config: {
-      systemInstruction: "You are the SMARTAIMAP AI Assistant. You help users navigate the #RAI system, explore 360 locations, and understand environmental data. Be technical, helpful, and maintain the futuristic aesthetic. Use #RAI and #SMARTAIMAP in your responses.",
-    },
-    history: history
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "chat", prompt: message, history }),
   });
-  const response = await chat.sendMessage({ message });
-  return response.text || "Uplink failed.";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Chat request failed.");
+  }
+  return typeof result.text === "string" && result.text ? result.text : "Uplink failed.";
 };
 
 export const getMapsGrounding = async (query: string, lat?: number, lng?: number): Promise<string> => {
