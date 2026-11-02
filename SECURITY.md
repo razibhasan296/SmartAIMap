@@ -24,7 +24,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 5. Remove the browser SDK dependency and Vite key definitions only after all call sites have migrated.
 6. Run type checks and a production build; inspect generated assets to confirm that no provider key or privileged credential is present.
 
-## Reviewed Gemini operation inventory
+## Reviewed Gemini operation inventory (11 of 14 operations migrated; `getMapsGrounding` has no active caller)
 
 - Structured extraction: `generateJsonFromPrompt` — migrated; server validates a restricted schema subset
 - Location report: `generateLocationData` — migrated to backend
@@ -34,7 +34,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 - Audio transcription: `transcribeAudio` — migrated to an 8MB-capped WAV endpoint
 - Speech synthesis: `generateSpeech` — migrated to server-side TTS with a 6,000-character input limit
 - Voice command parsing: `processVoiceCommand` — migrated to backend
-- Chat: `chatWithGemini` — not migrated
+- Chat: `chatWithGemini` — migrated to backend
 - Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
 - High-resolution image: `generateHighResImage` — migrated with server-validated size and aspect ratio
 - Video generation: `generateVeoVideo` — not migrated; the existing Veo 3.1 Preview model was shut down on 2026-10-22. Replace it with Gemini Omni Flash (`gemini-omni-1.1-flash`) using the Interactions API before enabling video generation.
