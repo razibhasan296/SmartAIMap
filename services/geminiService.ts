@@ -62,36 +62,23 @@ export const generateLocationData = async (locationName: string): Promise<Locati
 };
 
 export const generate360View = async (prompt: string): Promise<string> => {
-  const ai = getGeminiClient();
-  
   let finalPrompt = prompt;
-  // Specialized epic logic for the WORLD MAPS Hub - Updated with white circular disc and circuit aesthetic
   if (prompt.toLowerCase().includes("world map") || prompt.toLowerCase().includes("nexus prime") || prompt.toLowerCase().includes("initial_location")) {
-    finalPrompt = `A hyper-realistic 360-degree equirectangular panorama of the #SMARTAIMAP Global Intelligence Hub. The visualization displays a massive, glowing digital Earth in the center, surrounded by floating holographic data-streams. The map is alive with real-time environmental data: pulsing heat-maps of climate change, swirling emerald wind-patterns, and glowing cyan paths of #RAI bot swarms. Technical telemetry displays floating in mid-air: '#RAI', '#SMARTAIBOTBODYLOCK', '#ENVIRONMENT'. Massive curved obsidian floor reflects the glowing circuitry. Outside massive windows, orbital sunrise flares across the curve of Earth. Immersive, sci-fi, cinematic lighting, 8k resolution.`;
+    finalPrompt = `A hyper-realistic 360-degree equirectangular panorama of the #SMARTAIMAP Global Intelligence Hub. The visualization displays a massive, glowing digital Earth in the center, surrounded by floating holographic data-streams. The map is alive with generated illustrative climate, wind and data patterns. Technical telemetry displays floating in mid-air: '#RAI', '#SMARTAIBOTBODYLOCK', '#ENVIRONMENT'. Massive curved obsidian floor reflects the glowing circuitry. Outside massive windows, orbital sunrise flares across the curve of Earth. Immersive, sci-fi, cinematic lighting, 8k resolution.`;
   }
-
-  return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { text: `A futuristic 360-degree equirectangular panoramic view of ${finalPrompt}. The perspective should feel like an immersive virtual environment from a smart bot visor. Hyper-realistic, 8k resolution, cinematic lighting, dramatic atmosphere, detailed textures.` }
-        ]
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "16:9"
-        }
-      }
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    throw new Error("No image data received");
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      operation: "image-generation",
+      prompt: `A futuristic 360-degree equirectangular panoramic view of ${finalPrompt}. The perspective should feel like an immersive virtual environment from a smart bot visor. Hyper-realistic, 8k resolution, cinematic lighting, dramatic atmosphere, detailed textures.`,
+      aspectRatio: "16:9",
+    }),
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "360-degree image generation failed.");
+  if (typeof result.image !== "string" || typeof result.mimeType !== "string") throw new Error("The AI service returned no image data.");
+  return `data:${result.mimeType};base64,${result.image}`;
 };
 
 export const analyzeVideo = async (videoBase64: string, mimeType: string, prompt: string): Promise<string> => {
@@ -213,24 +200,15 @@ export const getMapsGrounding = async (query: string, lat?: number, lng?: number
 };
 
 export const generateHighResImage = async (prompt: string, size: '1K' | '2K' | '4K', aspectRatio: string): Promise<string> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
-    contents: { parts: [{ text: prompt }] },
-    config: {
-      imageConfig: {
-        imageSize: size as any,
-        aspectRatio: aspectRatio as any
-      }
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "image-highres", prompt, size, aspectRatio }),
   });
-
-  for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-      return `data:image/png;base64,${part.inlineData.data}`;
-    }
-  }
-  throw new Error("High-res render failed.");
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "High-resolution image generation failed.");
+  if (typeof result.image !== "string" || typeof result.mimeType !== "string") throw new Error("The AI service returned no image data.");
+  return `data:${result.mimeType};base64,${result.image}`;
 };
 
 export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:16'): Promise<string> => {
