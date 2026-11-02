@@ -76,3 +76,17 @@ test("structured extraction rejects deeply nested schemas", async () => {
   const response = await fetch(`${baseUrl}/api/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "structured-json", prompt: "extract", schema: JSON.stringify(schema) }) });
   assert.equal(response.status, 400);
 });
+
+test("structured extraction rejects oversized property names", async () => {
+  const longName = "x".repeat(129);
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      operation: "structured-json",
+      prompt: "extract",
+      schema: JSON.stringify({ type: "OBJECT", properties: { [longName]: { type: "STRING" } } }),
+    }),
+  });
+  assert.equal(response.status, 400);
+});
