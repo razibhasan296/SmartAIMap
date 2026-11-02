@@ -74,6 +74,7 @@ function validateOutputSchema(schema, depth = 0, budget = { nodes: 0 }) {
     if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) throw new Error("Object schemas need properties.");
     const keys = Object.keys(schema.properties);
     if (keys.length > 30) throw new Error("Too many object properties.");
+    if (keys.some((key) => key.length < 1 || key.length > 128)) throw new Error("Schema property names must contain 1–128 characters.");
     const required = schema.required ?? [];
     if (!Array.isArray(required) || required.length > keys.length || required.some((key) => typeof key !== "string" || !keys.includes(key))) throw new Error("Invalid required property list.");
     result.properties = Object.fromEntries(keys.map((key) => [key, validateOutputSchema(schema.properties[key], depth + 1, budget)]));
