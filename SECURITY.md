@@ -11,7 +11,7 @@
 
 ## Migration status: incomplete
 
-Two of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning` and `processVoiceCommand`. The server selects each operation’s model and configuration, and validates the voice-command action against a fixed enum.
+Three of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning`, `processVoiceCommand`, and `getCodexEntries`. The server selects each operation’s model and configuration, validates voice-command actions against a fixed enum, and validates Codex output against a fixed JSON schema.
 
 The remaining browser-side Gemini service still initializes `GoogleGenAI` from `process.env.API_KEY`. The Vite build configuration has historically exposed API-key environment values to browser code. This partial migration does not remove that exposure.
 
@@ -38,7 +38,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 - Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
 - High-resolution image: `generateHighResImage` — not migrated
 - Veo video generation: `generateVeoVideo` — not migrated
-- Codex entries: `getCodexEntries` — not migrated
+- Codex entries: `getCodexEntries` — migrated to backend
 - Classified-code narrative: `decryptClassifiedCode` — not migrated; AI-generated narrative only, not cryptographic decryption or authorization
 
 ## Production hardening
