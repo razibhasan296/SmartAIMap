@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { LocationInfo, SensorData, VisualStyle, CodexEntry } from "../types";
 
 const API_KEY = process.env.API_KEY || '';
@@ -155,15 +155,16 @@ export const analyzeVideo = async (videoBase64: string, mimeType: string, prompt
 };
 
 export const complexReasoning = async (query: string): Promise<string> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: query,
-    config: {
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "reasoning", prompt: query }),
   });
-  return response.text || "Reasoning process failed.";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Reasoning request failed.");
+  }
+  return typeof result.text === "string" && result.text ? result.text : "Reasoning process failed.";
 };
 
 export const transcribeAudio = async (base64: string): Promise<string> => {
