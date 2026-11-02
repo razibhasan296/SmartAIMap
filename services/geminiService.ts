@@ -282,25 +282,19 @@ export const getCodexEntries = async (query: string): Promise<CodexEntry[]> => {
 };
 
 export const decryptClassifiedCode = async (code: string): Promise<{ locationName: string, intel: string, style: VisualStyle }> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
-    contents: `Decrypt this classified #RAI access code: "${code}". 
-    This is a high-security identifier for a secret location in the SMARTAIMAP system.
-    Provide the name of the classified location, a brief high-level intelligence report, and the recommended visual lens style (e.g., 'Classified', 'Night Vision', 'Thermal').`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          locationName: { type: Type.STRING },
-          intel: { type: Type.STRING },
-          style: { type: Type.STRING }
-        },
-        required: ["locationName", "intel", "style"]
-      }
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "location-demo", prompt: code }),
   });
-  
-  return JSON.parse(response.text);
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Location demo generation failed.");
+  }
+  const parsed = JSON.parse(typeof result.text === "string" ? result.text : "{}");
+  const styles: VisualStyle[] = ["Cinematic", "Thermal", "Night Vision", "Cyberpunk", "Deep Space", "Post-Apocalyptic", "Solar-Punk", "Classified"];
+  if (!parsed || typeof parsed.locationName !== "string" || typeof parsed.intel !== "string" || !styles.includes(parsed.style)) {
+    throw new Error("AI provider returned an invalid location demo.");
+  }
+  return parsed;
 };
