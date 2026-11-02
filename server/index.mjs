@@ -85,14 +85,26 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = body.operation === "reasoning" ? "reasoning" : "generate";
+    const operation = ["generate", "reasoning", "voice-command"].includes(body.operation) ? body.operation : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
     }
 
+    const requestContents = operation === "voice-command"
+      ? `Interpret this voice command for the #RAI system: "${prompt}". Possible actions: NAVIGATE (go to a location), SELECT_MARKER (interact with a point of interest), CHANGE_STYLE (change visual lens), UNKNOWN (unrecognized). Return only the requested structured result.`
+      : prompt;
+    const voiceSchema = {
+      type: "OBJECT",
+      properties: {
+        action: { type: "STRING", enum: ["NAVIGATE", "SELECT_MARKER", "CHANGE_STYLE", "UNKNOWN"] },
+        target: { type: "STRING" },
+      },
+      required: ["action"],
+    };
+
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -100,8 +112,8 @@ const server = http.createServer(async (req, res) => {
           "x-goog-api-key": API_KEY,
         },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2048 },
+          contents: [{ role: "user", parts: [{ text: requestContents }] }],
+          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
