@@ -11,7 +11,7 @@
 
 ## Migration status: incomplete
 
-Three of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning`, `processVoiceCommand`, and `getCodexEntries`. The server selects each operation’s model and configuration, validates voice-command actions against a fixed enum, and validates Codex output against a fixed JSON schema.
+Four of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning`, `processVoiceCommand`, `getCodexEntries`, and `generateLocationData`. The server selects each operation’s model and configuration and validates structured voice-command, Codex, and location-report output against fixed JSON schemas. Location report values are AI-generated estimates, not live sensor telemetry.
 
 The remaining browser-side Gemini service still initializes `GoogleGenAI` from `process.env.API_KEY`. The Vite build configuration has historically exposed API-key environment values to browser code. This partial migration does not remove that exposure.
 
@@ -27,7 +27,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 ## Reviewed Gemini operation inventory
 
 - Structured extraction: `generateJsonFromPrompt` — not migrated
-- Location report: `generateLocationData` — not migrated
+- Location report: `generateLocationData` — migrated to backend
 - Panorama image: `generate360View` — not migrated
 - Video analysis: `analyzeVideo` — not migrated
 - Complex reasoning: `complexReasoning` — migrated to backend
