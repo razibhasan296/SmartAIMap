@@ -1,0 +1,106 @@
+import http from "node:http";
+
+const PORT = Number(process.env.PORT || 8787);
+const API_KEY = process.env.GEMINI_API_KEY;
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS = 30;
+const MAX_BODY_BYTES = 32 * 1024;
+const clients = new Map();
+
+const json = (res, status, data) => {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  });
+  res.end(JSON.stringify(data));
+};
+
+function consumeRateLimit(key) {
+  const now = Date.now();
+  const current = clients.get(key);
+  if (!current || now - current.startedAt >= WINDOW_MS) {
+    clients.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= MAX_REQUESTS;
+}
+
+async function readJson(req) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw Object.assign(new Error("Request body too large"), { status: 413 });
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw Object.assign(new Error("Expected a valid JSON body"), { status: 400 });
+  }
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === "GET" && req.url === "/api/health") {
+    return json(res, 200, { ok: true, service: "smart-ai-map-api" });
+  }
+
+  if (req.method !== "POST" || req.url !== "/api/generate") {
+    return json(res, 404, { error: "Not found" });
+  }
+
+  const clientKey = req.socket.remoteAddress || "unknown";
+  if (!consumeRateLimit(clientKey)) {
+    return json(res, 429, { error: "Rate limit exceeded. Try again shortly." });
+  }
+
+  if (!API_KEY) {
+    return json(res, 503, { error: "AI service is not configured on the server." });
+  }
+
+  try {
+    const body = await readJson(req);
+    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    if (!prompt || prompt.length > 12_000) {
+      return json(res, 400, { error: "prompt must contain 1–12000 characters." });
+    }
+
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(45_000),
+      },
+    );
+
+    const result = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      const status = upstream.status === 429 ? 429 : 502;
+      return json(res, status, { error: "AI provider request failed.", providerStatus: upstream.status });
+    }
+
+    const text = result.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("") || "";
+    return json(res, 200, { text });
+  } catch (error) {
+    const status = error.status || (error.name === "TimeoutError" ? 504 : 500);
+    return json(res, status, { error: status === 500 ? "Internal server error." : error.message });
+  }
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`SmartAIMap API listening on port ${PORT}`);
+});
