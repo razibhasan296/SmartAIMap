@@ -11,7 +11,7 @@
 
 ## Migration status: incomplete
 
-One of the 14 reviewed Gemini operations, `complexReasoning`, now calls the same-origin backend endpoint. The server selects the reasoning model and HIGH thinking configuration; the browser no longer selects either for this operation.
+Two of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning` and `processVoiceCommand`. The server selects each operation’s model and configuration, and validates the voice-command action against a fixed enum.
 
 The remaining browser-side Gemini service still initializes `GoogleGenAI` from `process.env.API_KEY`. The Vite build configuration has historically exposed API-key environment values to browser code. This partial migration does not remove that exposure.
 
@@ -33,7 +33,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 - Complex reasoning: `complexReasoning` — migrated to backend
 - Audio transcription: `transcribeAudio` — not migrated
 - Speech synthesis: `generateSpeech` — not migrated
-- Voice command parsing: `processVoiceCommand` — not migrated
+- Voice command parsing: `processVoiceCommand` — migrated to backend
 - Chat: `chatWithGemini` — not migrated
 - Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
 - High-resolution image: `generateHighResImage` — not migrated
