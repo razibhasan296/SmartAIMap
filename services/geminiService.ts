@@ -309,33 +309,22 @@ export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:
 };
 
 export const getCodexEntries = async (query: string): Promise<CodexEntry[]> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Generate 5 relevant SMARTAIMAP Codex entries for the query: "${query}". 
-    Categories: Location, Protocol, Intelligence, Entity.
-    Entries should be technical and sci-fi themed.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            title: { type: Type.STRING },
-            category: { type: Type.STRING, enum: ["Location", "Protocol", "Intelligence", "Entity"] },
-            content: { type: Type.STRING },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            lastUpdated: { type: Type.STRING }
-          },
-          required: ["id", "title", "category", "content", "tags", "lastUpdated"]
-        }
-      }
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "codex-entries", prompt: query }),
   });
-  
-  return JSON.parse(response.text);
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Codex generation failed.");
+  }
+  try {
+    const entries = JSON.parse(typeof result.text === "string" ? result.text : "");
+    if (!Array.isArray(entries)) throw new Error("Invalid Codex response");
+    return entries.slice(0, 5) as CodexEntry[];
+  } catch {
+    throw new Error("The AI service returned invalid Codex data.");
+  }
 };
 
 export const decryptClassifiedCode = async (code: string): Promise<{ locationName: string, intel: string, style: VisualStyle }> => {
