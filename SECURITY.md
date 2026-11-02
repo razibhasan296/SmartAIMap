@@ -26,7 +26,7 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 
 ## Reviewed Gemini operation inventory
 
-- Structured extraction: `generateJsonFromPrompt` — not migrated
+- Structured extraction: `generateJsonFromPrompt` — migrated; server validates a restricted schema subset
 - Location report: `generateLocationData` — migrated to backend
 - Panorama image: `generate360View` — not migrated
 - Video analysis: `analyzeVideo` — not migrated
