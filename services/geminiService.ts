@@ -82,17 +82,14 @@ export const generate360View = async (prompt: string): Promise<string> => {
 };
 
 export const analyzeVideo = async (videoBase64: string, mimeType: string, prompt: string): Promise<string> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: {
-      parts: [
-        { inlineData: { data: videoBase64, mimeType } },
-        { text: prompt }
-      ]
-    }
+  const response = await fetch("/api/video/analyze", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoBase64, mimeType, prompt }),
   });
-  return response.text || "No analysis available.";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Video analysis failed.");
+  return typeof result.text === "string" ? result.text : "No analysis available.";
 };
 
 export const complexReasoning = async (query: string): Promise<string> => {
