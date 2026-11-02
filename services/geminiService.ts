@@ -8,24 +8,16 @@ export const getGeminiClient = () => {
 };
 
 export const generateJsonFromPrompt = async (prompt: string, schemaString: string): Promise<string> => {
-  const ai = getGeminiClient();
-  let schemaObj;
-  try {
-    schemaObj = JSON.parse(schemaString);
-  } catch (e) {
-    throw new Error("Invalid JSON Schema provided. Please ensure it is valid JSON.");
-  }
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: schemaObj,
-    }
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "structured-json", prompt, schema: schemaString }),
   });
-  
-  return response.text || "{}";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Structured extraction failed.");
+  }
+  return typeof result.text === "string" && result.text ? result.text : "{}";
 };
 
 /**
