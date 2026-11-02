@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      server: {
+        port: 3000,
+        host: '0.0.0.0',
+        proxy: {
+          '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+        },
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
