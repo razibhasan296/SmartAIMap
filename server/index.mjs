@@ -61,6 +61,37 @@ async function readJson(req) {
   }
 }
 
+function validateOutputSchema(schema, depth = 0, budget = { nodes: 0 }) {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema) || depth > 6) throw new Error("Invalid schema structure.");
+  budget.nodes += 1;
+  if (budget.nodes > 100) throw new Error("Schema is too complex.");
+  const allowed = new Set(["type", "properties", "required", "items", "enum"]);
+  if (Object.keys(schema).some((key) => !allowed.has(key))) throw new Error("Schema contains unsupported keywords.");
+  const types = new Set(["OBJECT", "ARRAY", "STRING", "NUMBER", "INTEGER", "BOOLEAN"]);
+  if (!types.has(schema.type)) throw new Error("Schema type is not supported.");
+  const result = { type: schema.type };
+  if (schema.type === "OBJECT") {
+    if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) throw new Error("Object schemas need properties.");
+    const keys = Object.keys(schema.properties);
+    if (keys.length > 30) throw new Error("Too many object properties.");
+    const required = schema.required ?? [];
+    if (!Array.isArray(required) || required.length > keys.length || required.some((key) => typeof key !== "string" || !keys.includes(key))) throw new Error("Invalid required property list.");
+    result.properties = Object.fromEntries(keys.map((key) => [key, validateOutputSchema(schema.properties[key], depth + 1, budget)]));
+    if (required.length) result.required = required;
+  }
+  if (schema.type === "ARRAY") {
+    if (!schema.items) throw new Error("Array schemas need an items schema.");
+    result.items = validateOutputSchema(schema.items, depth + 1, budget);
+  }
+  if (schema.enum !== undefined) {
+    if (schema.type !== "STRING" || !Array.isArray(schema.enum) || schema.enum.length < 1 || schema.enum.length > 50 || schema.enum.some((value) => typeof value !== "string" || value.length > 120)) {
+      throw new Error("Invalid string enum.");
+    }
+    result.enum = schema.enum;
+  }
+  return result;
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/api/health") {
     return json(res, 200, { ok: true, service: "smart-ai-map-api" });
@@ -85,10 +116,22 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat"].includes(body.operation) ? body.operation : "generate";
+    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json"].includes(body.operation) ? body.operation : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
+    }
+
+    let customOutputSchema = null;
+    if (operation === "structured-json") {
+      if (typeof body.schema !== "string" || body.schema.length > 12_000) {
+        return json(res, 400, { error: "schema must be JSON text no larger than 12KB." });
+      }
+      try {
+        customOutputSchema = validateOutputSchema(JSON.parse(body.schema));
+      } catch (error) {
+        return json(res, 400, { error: error.message || "Invalid output schema." });
+      }
     }
 
     let chatContents = null;
@@ -201,7 +244,7 @@ const server = http.createServer(async (req, res) => {
           systemInstruction: operation === "chat"
             ? { parts: [{ text: "You are the SMARTAIMAP AI Assistant. Help users navigate the #RAI system, explore generated locations, and understand environmental information. Clearly distinguish AI-generated estimates and simulated sensor values from verified live measurements. Do not claim to control devices or access sensors unless an explicitly connected tool confirms that action." }] }
             : undefined,
-          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
+          generationConfig: { maxOutputTokens: 2048, ...(operation === "structured-json" ? { responseMimeType: "application/json", responseSchema: customOutputSchema } : {}), ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
