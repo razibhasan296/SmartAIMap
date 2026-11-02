@@ -85,10 +85,37 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report"].includes(body.operation) ? body.operation : "generate";
+    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat"].includes(body.operation) ? body.operation : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
+    }
+
+    let chatContents = null;
+    if (operation === "chat") {
+      if (!Array.isArray(body.history) || body.history.length > 20) {
+        return json(res, 400, { error: "history must be an array with at most 20 messages." });
+      }
+      let historyCharacters = 0;
+      chatContents = [];
+      for (const item of body.history) {
+        if (!item || !["user", "model"].includes(item.role) || !Array.isArray(item.parts) || item.parts.length < 1 || item.parts.length > 4) {
+          return json(res, 400, { error: "history contains an invalid message." });
+        }
+        const parts = [];
+        for (const part of item.parts) {
+          if (!part || typeof part.text !== "string" || !part.text.trim() || part.text.length > 4_000) {
+            return json(res, 400, { error: "Each history text part must contain 1–4000 characters." });
+          }
+          historyCharacters += part.text.length;
+          if (historyCharacters > 16_000) {
+            return json(res, 400, { error: "Conversation history is too large." });
+          }
+          parts.push({ text: part.text });
+        }
+        chatContents.push({ role: item.role, parts });
+      }
+      chatContents.push({ role: "user", parts: [{ text: prompt }] });
     }
 
     const requestContents = operation === "voice-command"
@@ -170,7 +197,10 @@ const server = http.createServer(async (req, res) => {
           "x-goog-api-key": API_KEY,
         },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: requestContents }] }],
+          contents: operation === "chat" ? chatContents : [{ role: "user", parts: [{ text: requestContents }] }],
+          systemInstruction: operation === "chat"
+            ? { parts: [{ text: "You are the SMARTAIMAP AI Assistant. Help users navigate the #RAI system, explore generated locations, and understand environmental information. Clearly distinguish AI-generated estimates and simulated sensor values from verified live measurements. Do not claim to control devices or access sensors unless an explicitly connected tool confirms that action." }] }
+            : undefined,
           generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
