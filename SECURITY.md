@@ -28,15 +28,15 @@ Do not deploy this branch as a completed secret-migration fix. Before public dep
 
 - Structured extraction: `generateJsonFromPrompt` — migrated; server validates a restricted schema subset
 - Location report: `generateLocationData` — migrated to backend
-- Panorama image: `generate360View` — not migrated
+- Panorama image: `generate360View` — migrated to bounded server image endpoint
 - Video analysis: `analyzeVideo` — not migrated
 - Complex reasoning: `complexReasoning` — migrated to backend
-- Audio transcription: `transcribeAudio` — not migrated
-- Speech synthesis: `generateSpeech` — not migrated
+- Audio transcription: `transcribeAudio` — migrated to an 8MB-capped WAV endpoint
+- Speech synthesis: `generateSpeech` — migrated to server-side TTS with a 6,000-character input limit
 - Voice command parsing: `processVoiceCommand` — migrated to backend
 - Chat: `chatWithGemini` — not migrated
 - Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
-- High-resolution image: `generateHighResImage` — not migrated
+- High-resolution image: `generateHighResImage` — migrated with server-validated size and aspect ratio
 - Veo video generation: `generateVeoVideo` — not migrated
 - Codex entries: `getCodexEntries` — migrated to backend
 - Classified-code narrative: `decryptClassifiedCode` — not migrated; AI-generated narrative only, not cryptographic decryption or authorization
