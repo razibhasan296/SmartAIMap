@@ -109,34 +109,25 @@ export const complexReasoning = async (query: string): Promise<string> => {
 };
 
 export const transcribeAudio = async (base64: string): Promise<string> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { data: base64, mimeType: 'audio/wav' } },
-        { text: "Transcribe this audio command for the #RAI interface." }
-      ]
-    }
+  const response = await fetch("/api/audio/transcribe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ audioBase64: base64 }),
   });
-  return response.text || "";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Audio transcription failed.");
+  return typeof result.text === "string" ? result.text : "";
 };
 
 export const generateSpeech = async (text: string): Promise<string> => {
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text }] }],
-    config: {
-      responseModalities: ["AUDIO" as any],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' },
-        },
-      },
-    },
+  const response = await fetch("/api/audio/speech", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
   });
-  return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Speech generation failed.");
+  return typeof result.audio === "string" ? result.audio : "";
 };
 
 export const processVoiceCommand = async (transcript: string): Promise<{ action: string, target?: string }> => {
