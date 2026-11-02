@@ -6,6 +6,7 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 30;
 const MAX_BODY_BYTES = 32 * 1024;
+const MAX_RATE_LIMIT_KEYS = 10_000;
 const clients = new Map();
 
 const json = (res, status, data) => {
@@ -21,22 +22,38 @@ const json = (res, status, data) => {
 function consumeRateLimit(key) {
   const now = Date.now();
   const current = clients.get(key);
+
   if (!current || now - current.startedAt >= WINDOW_MS) {
+    if (clients.size >= MAX_RATE_LIMIT_KEYS) {
+      for (const [client, entry] of clients) {
+        if (now - entry.startedAt >= WINDOW_MS) clients.delete(client);
+      }
+      if (clients.size >= MAX_RATE_LIMIT_KEYS) return false;
+    }
     clients.set(key, { startedAt: now, count: 1 });
     return true;
   }
+
   current.count += 1;
   return current.count <= MAX_REQUESTS;
 }
 
 async function readJson(req) {
+  const contentLength = Number(req.headers["content-length"] || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    throw Object.assign(new Error("Request body too large"), { status: 413 });
+  }
+
   let size = 0;
   const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw Object.assign(new Error("Request body too large"), { status: 413 });
+    if (size > MAX_BODY_BYTES) {
+      throw Object.assign(new Error("Request body too large"), { status: 413 });
+    }
     chunks.push(chunk);
   }
+
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
@@ -51,6 +68,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method !== "POST" || req.url !== "/api/generate") {
     return json(res, 404, { error: "Not found" });
+  }
+
+  if (!req.headers["content-type"]?.toLowerCase().startsWith("application/json")) {
+    return json(res, 415, { error: "Content-Type must be application/json." });
   }
 
   const clientKey = req.socket.remoteAddress || "unknown";
@@ -100,6 +121,9 @@ const server = http.createServer(async (req, res) => {
     return json(res, status, { error: status === 500 ? "Internal server error." : error.message });
   }
 });
+
+server.requestTimeout = 10_000;
+server.headersTimeout = 12_000;
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`SmartAIMap API listening on port ${PORT}`);
