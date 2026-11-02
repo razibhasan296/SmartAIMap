@@ -49,62 +49,24 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 2, delay = 2000): Pr
 };
 
 export const generateLocationData = async (locationName: string): Promise<LocationInfo> => {
-  const ai = getGeminiClient();
-  
-  return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Analyze the location "${locationName}" for our SMARTAIMAP RAI system. Provide a detailed report including its environmental sound characteristics and 3-5 interesting points of interest (markers) that would be visible in a 360 view.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            coordinates: {
-              type: Type.OBJECT,
-              properties: {
-                lat: { type: Type.NUMBER },
-                lng: { type: Type.NUMBER }
-              },
-              required: ["lat", "lng"]
-            },
-            description: { type: Type.STRING },
-            threatLevel: { type: Type.STRING, enum: ["Low", "Moderate", "Critical", "Unknown"] },
-            soundProfile: { type: Type.STRING, enum: ["Industrial", "Natural", "Void", "Electronic", "Hostile"] },
-            markers: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  label: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  type: { type: Type.STRING, enum: ["History", "Anomaly", "Sensor", "POI"] },
-                  x: { type: Type.NUMBER, description: "Horizontal position 0-100" },
-                  y: { type: Type.NUMBER, description: "Vertical position 20-80" }
-                },
-                required: ["id", "label", "description", "type", "x", "y"]
-              }
-            },
-            sensorSummary: {
-              type: Type.OBJECT,
-              properties: {
-                temperature: { type: Type.NUMBER },
-                humidity: { type: Type.NUMBER },
-                pressure: { type: Type.NUMBER },
-                radiation: { type: Type.NUMBER },
-                aiSync: { type: Type.NUMBER },
-                raiStability: { type: Type.NUMBER }
-              }
-            }
-          },
-          required: ["name", "coordinates", "description", "threatLevel", "sensorSummary", "soundProfile", "markers"]
-        }
-      }
-    });
-    return JSON.parse(response.text);
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "location-report", prompt: locationName }),
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof result.error === "string" ? result.error : "Location report failed.");
+  }
+  try {
+    const parsed = JSON.parse(typeof result.text === "string" ? result.text : "");
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.markers)) {
+      throw new Error("Invalid location report");
+    }
+    return parsed as LocationInfo;
+  } catch {
+    throw new Error("The AI service returned invalid location data.");
+  }
 };
 
 export const generate360View = async (prompt: string): Promise<string> => {
