@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = ["generate", "reasoning", "voice-command", "codex-entries"].includes(body.operation) ? body.operation : "generate";
+    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report"].includes(body.operation) ? body.operation : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
@@ -95,7 +95,9 @@ const server = http.createServer(async (req, res) => {
       ? `Interpret this voice command for the #RAI system: "${prompt}". Possible actions: NAVIGATE (go to a location), SELECT_MARKER (interact with a point of interest), CHANGE_STYLE (change visual lens), UNKNOWN (unrecognized). Return only the requested structured result.`
       : operation === "codex-entries"
         ? `Generate 5 relevant SMARTAIMAP Codex entries for this query: "${prompt}". Categories: Location, Protocol, Intelligence, Entity. Entries should be technical and sci-fi themed.`
-        : prompt;
+        : operation === "location-report"
+          ? `Create a clearly labeled AI-generated location overview for SmartAIMap for the place: "${prompt}". Do not present estimated environmental values or threat assessments as live measurements. Use Unknown when data is not verifiable.`
+          : prompt;
     const codexSchema = {
       type: "ARRAY",
       items: {
@@ -111,6 +113,45 @@ const server = http.createServer(async (req, res) => {
         required: ["id", "title", "category", "content", "tags", "lastUpdated"],
       },
     };
+    const locationSchema = {
+      type: "OBJECT",
+      properties: {
+        name: { type: "STRING" },
+        coordinates: {
+          type: "OBJECT",
+          properties: { lat: { type: "NUMBER" }, lng: { type: "NUMBER" } },
+          required: ["lat", "lng"],
+        },
+        description: { type: "STRING" },
+        threatLevel: { type: "STRING", enum: ["Low", "Moderate", "Critical", "Unknown"] },
+        soundProfile: { type: "STRING", enum: ["Industrial", "Natural", "Void", "Electronic", "Hostile"] },
+        markers: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              id: { type: "STRING" },
+              label: { type: "STRING" },
+              description: { type: "STRING" },
+              type: { type: "STRING", enum: ["History", "Anomaly", "Sensor", "POI"] },
+              x: { type: "NUMBER" },
+              y: { type: "NUMBER" },
+            },
+            required: ["id", "label", "description", "type", "x", "y"],
+          },
+        },
+        sensorSummary: {
+          type: "OBJECT",
+          properties: {
+            temperature: { type: "NUMBER" }, humidity: { type: "NUMBER" },
+            pressure: { type: "NUMBER" }, radiation: { type: "NUMBER" },
+            aiSync: { type: "NUMBER" }, raiStability: { type: "NUMBER" },
+          },
+          required: ["temperature", "humidity", "pressure", "radiation", "aiSync", "raiStability"],
+        },
+      },
+      required: ["name", "coordinates", "description", "threatLevel", "soundProfile", "markers", "sensorSummary"],
+    };
     const voiceSchema = {
       type: "OBJECT",
       properties: {
@@ -121,7 +162,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" || operation === "location-report" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -130,7 +171,7 @@ const server = http.createServer(async (req, res) => {
         },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: requestContents }] }],
-          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : {}) },
+          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
