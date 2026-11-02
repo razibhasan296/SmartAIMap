@@ -126,3 +126,30 @@ test("speech generation rejects empty text", async () => {
   });
   assert.equal(response.status, 400);
 });
+
+test("video analysis rejects unsupported MIME types", async () => {
+  const response = await fetch(`${baseUrl}/api/video/analyze`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoBase64: "AAAA", mimeType: "application/octet-stream", prompt: "Summarize." }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test("video analysis rejects malformed base64", async () => {
+  const response = await fetch(`${baseUrl}/api/video/analyze`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoBase64: "not base64!", mimeType: "video/mp4", prompt: "Summarize." }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test("video analysis rejects an empty prompt", async () => {
+  const response = await fetch(`${baseUrl}/api/video/analyze`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoBase64: "AAAA", mimeType: "video/mp4", prompt: "  " }),
+  });
+  assert.equal(response.status, 400);
+});
