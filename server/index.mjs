@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = ["generate", "reasoning", "voice-command"].includes(body.operation) ? body.operation : "generate";
+    const operation = ["generate", "reasoning", "voice-command", "codex-entries"].includes(body.operation) ? body.operation : "generate";
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
@@ -93,7 +93,24 @@ const server = http.createServer(async (req, res) => {
 
     const requestContents = operation === "voice-command"
       ? `Interpret this voice command for the #RAI system: "${prompt}". Possible actions: NAVIGATE (go to a location), SELECT_MARKER (interact with a point of interest), CHANGE_STYLE (change visual lens), UNKNOWN (unrecognized). Return only the requested structured result.`
-      : prompt;
+      : operation === "codex-entries"
+        ? `Generate 5 relevant SMARTAIMAP Codex entries for this query: "${prompt}". Categories: Location, Protocol, Intelligence, Entity. Entries should be technical and sci-fi themed.`
+        : prompt;
+    const codexSchema = {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING" },
+          title: { type: "STRING" },
+          category: { type: "STRING", enum: ["Location", "Protocol", "Intelligence", "Entity"] },
+          content: { type: "STRING" },
+          tags: { type: "ARRAY", items: { type: "STRING" } },
+          lastUpdated: { type: "STRING" },
+        },
+        required: ["id", "title", "category", "content", "tags", "lastUpdated"],
+      },
+    };
     const voiceSchema = {
       type: "OBJECT",
       properties: {
@@ -104,7 +121,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -113,7 +130,7 @@ const server = http.createServer(async (req, res) => {
         },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: requestContents }] }],
-          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : {}) },
+          generationConfig: { maxOutputTokens: 2048, ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
