@@ -6,6 +6,8 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 30;
 const MAX_BODY_BYTES = 32 * 1024;
+const MAX_AUDIO_BODY_BYTES = 12 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const clients = new Map();
 
@@ -38,9 +40,9 @@ function consumeRateLimit(key) {
   return current.count <= MAX_REQUESTS;
 }
 
-async function readJson(req) {
+async function readJson(req, maxBytes = MAX_BODY_BYTES) {
   const contentLength = Number(req.headers["content-length"] || 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw Object.assign(new Error("Request body too large"), { status: 413 });
   }
 
@@ -48,7 +50,7 @@ async function readJson(req) {
   const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       throw Object.assign(new Error("Request body too large"), { status: 413 });
     }
     chunks.push(chunk);
@@ -98,7 +100,8 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, service: "smart-ai-map-api" });
   }
 
-  if (req.method !== "POST" || req.url !== "/api/generate") {
+  const supportedPostPath = ["/api/generate", "/api/audio/transcribe", "/api/audio/speech"].includes(req.url);
+  if (req.method !== "POST" || !supportedPostPath) {
     return json(res, 404, { error: "Not found" });
   }
 
@@ -116,7 +119,59 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    const body = await readJson(req);
+    const body = await readJson(req, req.url === "/api/audio/transcribe" ? MAX_AUDIO_BODY_BYTES : MAX_BODY_BYTES);
+
+    if (req.url === "/api/audio/transcribe") {
+      const audio = body.audioBase64;
+      if (typeof audio !== "string" || audio.length < 4 || audio.length > Math.ceil(MAX_AUDIO_BYTES * 4 / 3) + 4 || audio.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(audio)) {
+        return json(res, 400, { error: "Audio must be valid base64 within the 8MB limit." });
+      }
+      const audioBytes = Buffer.from(audio, "base64");
+      if (audioBytes.length < 1 || audioBytes.length > MAX_AUDIO_BYTES) {
+        return json(res, 413, { error: "Audio exceeds the 8MB limit." });
+      }
+      const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": API_KEY },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [
+            { inlineData: { mimeType: "audio/wav", data: audio } },
+            { text: "Transcribe this audio command for the #RAI interface. Return only the transcription." },
+          ] }],
+          generationConfig: { maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const result = await upstream.json().catch(() => ({}));
+      if (!upstream.ok) return json(res, upstream.status === 429 ? 429 : 502, { error: "Audio transcription provider request failed." });
+      const text = result.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+      return json(res, 200, { text });
+    }
+
+    if (req.url === "/api/audio/speech") {
+      const speechText = typeof body.text === "string" ? body.text.trim() : "";
+      if (!speechText || speechText.length > 6000) {
+        return json(res, 400, { error: "text must contain 1–6000 characters." });
+      }
+      const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": API_KEY },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: speechText }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+          },
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const result = await upstream.json().catch(() => ({}));
+      if (!upstream.ok) return json(res, upstream.status === 429 ? 429 : 502, { error: "Speech generation provider request failed." });
+      const audioPart = result.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data);
+      if (!audioPart) return json(res, 502, { error: "Speech provider returned no audio." });
+      return json(res, 200, { audio: audioPart.inlineData.data, mimeType: audioPart.inlineData.mimeType || "audio/wav" });
+    }
+
     const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json", "location-demo", "image-generation", "image-highres"];
     const operation = body.operation ?? "generate";
     if (typeof operation !== "string" || !allowedOperations.includes(operation)) {
