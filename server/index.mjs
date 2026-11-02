@@ -116,7 +116,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json"];
+    const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json", "location-demo"];
     const operation = body.operation ?? "generate";
     if (typeof operation !== "string" || !allowedOperations.includes(operation)) {
       return json(res, 400, { error: "Unsupported generation operation." });
@@ -165,7 +165,9 @@ const server = http.createServer(async (req, res) => {
       chatContents.push({ role: "user", parts: [{ text: prompt }] });
     }
 
-    const requestContents = operation === "voice-command"
+    const requestContents = operation === "location-demo"
+      ? `Treat this as a fictional SmartAIMap demo identifier, not a real credential. Do not decrypt, authenticate, reveal secrets, or claim access to a real location. Generate a clearly fictional location name, a short imaginative overview, and one visual style from the allowed schema for this demo input: "${prompt}".`
+      : operation === "voice-command"
       ? `Interpret this voice command for the #RAI system: "${prompt}". Possible actions: NAVIGATE (go to a location), SELECT_MARKER (interact with a point of interest), CHANGE_STYLE (change visual lens), UNKNOWN (unrecognized). Return only the requested structured result.`
       : operation === "codex-entries"
         ? `Generate 5 relevant SMARTAIMAP Codex entries for this query: "${prompt}". Categories: Location, Protocol, Intelligence, Entity. Entries should be technical and sci-fi themed.`
@@ -226,6 +228,15 @@ const server = http.createServer(async (req, res) => {
       },
       required: ["name", "coordinates", "description", "threatLevel", "soundProfile", "markers", "sensorSummary"],
     };
+    const demoLocationSchema = {
+      type: "OBJECT",
+      properties: {
+        locationName: { type: "STRING" },
+        intel: { type: "STRING" },
+        style: { type: "STRING", enum: ["Cinematic", "Thermal", "Night Vision", "Cyberpunk", "Deep Space", "Post-Apocalyptic", "Solar-Punk", "Classified"] },
+      },
+      required: ["locationName", "intel", "style"],
+    };
     const voiceSchema = {
       type: "OBJECT",
       properties: {
@@ -236,7 +247,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" || operation === "location-report" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" || operation === "location-demo" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" || operation === "location-report" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -248,7 +259,7 @@ const server = http.createServer(async (req, res) => {
           systemInstruction: operation === "chat"
             ? { parts: [{ text: "You are the SMARTAIMAP AI Assistant. Help users navigate the #RAI system, explore generated locations, and understand environmental information. Clearly distinguish AI-generated estimates and simulated sensor values from verified live measurements. Do not claim to control devices or access sensors unless an explicitly connected tool confirms that action." }] }
             : undefined,
-          generationConfig: { maxOutputTokens: 2048, ...(operation === "structured-json" ? { responseMimeType: "application/json", responseSchema: customOutputSchema } : {}), ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
+          generationConfig: { maxOutputTokens: 2048, ...(operation === "structured-json" ? { responseMimeType: "application/json", responseSchema: customOutputSchema } : operation === "location-demo" ? { responseMimeType: "application/json", responseSchema: demoLocationSchema } : {}), ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
