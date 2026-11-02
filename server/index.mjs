@@ -117,7 +117,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json", "location-demo"];
+    const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json", "location-demo", "image-generation", "image-highres"];
     const operation = body.operation ?? "generate";
     if (typeof operation !== "string" || !allowedOperations.includes(operation)) {
       return json(res, 400, { error: "Unsupported generation operation." });
@@ -125,6 +125,24 @@ const server = http.createServer(async (req, res) => {
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
+    }
+
+    let imageConfig = null;
+    if (operation === "image-generation" || operation === "image-highres") {
+      const ratios = new Set(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]);
+      const ratio = body.aspectRatio ?? "16:9";
+      if (typeof ratio !== "string" || !ratios.has(ratio)) {
+        return json(res, 400, { error: "Unsupported image aspect ratio." });
+      }
+      if (operation === "image-highres") {
+        const size = body.size ?? "2K";
+        if (!["1K", "2K", "4K"].includes(size)) {
+          return json(res, 400, { error: "Image size must be 1K, 2K, or 4K." });
+        }
+        imageConfig = { aspectRatio: ratio, imageSize: size };
+      } else {
+        imageConfig = { aspectRatio: ratio };
+      }
     }
 
     let customOutputSchema = null;
@@ -248,7 +266,7 @@ const server = http.createServer(async (req, res) => {
     };
 
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" || operation === "location-demo" ? "gemini-3-pro-preview" : operation === "voice-command" || operation === "codex-entries" || operation === "location-report" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(operation === "reasoning" || operation === "location-demo" ? "gemini-3-pro-preview" : operation === "image-generation" ? "gemini-2.5-flash-image" : operation === "image-highres" ? "gemini-3-pro-image-preview" : operation === "voice-command" || operation === "codex-entries" || operation === "location-report" ? "gemini-3-flash-preview" : MODEL)}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -260,7 +278,7 @@ const server = http.createServer(async (req, res) => {
           systemInstruction: operation === "chat"
             ? { parts: [{ text: "You are the SMARTAIMAP AI Assistant. Help users navigate the #RAI system, explore generated locations, and understand environmental information. Clearly distinguish AI-generated estimates and simulated sensor values from verified live measurements. Do not claim to control devices or access sensors unless an explicitly connected tool confirms that action." }] }
             : undefined,
-          generationConfig: { maxOutputTokens: 2048, ...(operation === "structured-json" ? { responseMimeType: "application/json", responseSchema: customOutputSchema } : operation === "location-demo" ? { responseMimeType: "application/json", responseSchema: demoLocationSchema } : {}), ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
+          generationConfig: { maxOutputTokens: 2048, ...(imageConfig ? { responseModalities: ["TEXT", "IMAGE"], imageConfig } : {}), ...(operation === "structured-json" ? { responseMimeType: "application/json", responseSchema: customOutputSchema } : operation === "location-demo" ? { responseMimeType: "application/json", responseSchema: demoLocationSchema } : {}), ...(operation === "voice-command" ? { responseMimeType: "application/json", responseSchema: voiceSchema } : operation === "codex-entries" ? { responseMimeType: "application/json", responseSchema: codexSchema } : operation === "location-report" ? { responseMimeType: "application/json", responseSchema: locationSchema } : {}) },
           ...(operation === "reasoning" ? { thinkingConfig: { thinkingLevel: "HIGH" } } : {}),
         }),
         signal: AbortSignal.timeout(45_000),
@@ -273,10 +291,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, status, { error: "AI provider request failed.", providerStatus: upstream.status });
     }
 
-    const text = result.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("") || "";
-    return json(res, 200, { text });
+    const responseParts = result.candidates?.[0]?.content?.parts || [];
+    const text = responseParts.map((part) => part.text || "").join("");
+    const imagePart = responseParts.find((part) => part.inlineData?.data);
+    return json(res, 200, {
+      text,
+      ...(imagePart ? { image: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType || "image/png" } : {}),
+    });
   } catch (error) {
     const status = error.status || (error.name === "TimeoutError" ? 504 : 500);
     return json(res, status, { error: status === 500 ? "Internal server error." : error.message });
