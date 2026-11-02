@@ -116,7 +116,11 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await readJson(req);
-    const operation = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json"].includes(body.operation) ? body.operation : "generate";
+    const allowedOperations = ["generate", "reasoning", "voice-command", "codex-entries", "location-report", "chat", "structured-json"];
+    const operation = body.operation ?? "generate";
+    if (typeof operation !== "string" || !allowedOperations.includes(operation)) {
+      return json(res, 400, { error: "Unsupported generation operation." });
+    }
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt || prompt.length > 12_000) {
       return json(res, 400, { error: "prompt must contain 1–12000 characters." });
