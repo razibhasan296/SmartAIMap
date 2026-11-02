@@ -90,3 +90,21 @@ test("structured extraction rejects oversized property names", async () => {
   });
   assert.equal(response.status, 400);
 });
+
+test("image generation rejects unsupported aspect ratios before provider access", async () => {
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "image-generation", prompt: "test image", aspectRatio: "freeform" }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test("high-resolution image generation rejects unsupported sizes", async () => {
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: "image-highres", prompt: "test image", size: "8K", aspectRatio: "16:9" }),
+  });
+  assert.equal(response.status, 400);
+});
