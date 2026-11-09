@@ -10,7 +10,7 @@ let server;
 before(async () => {
   server = spawn(process.execPath, ["server/index.mjs"], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(port), GEMINI_API_KEY: "test-placeholder" },
+    env: { ...process.env, NODE_ENV: "test", PORT: String(port), GEMINI_API_KEY: "test-placeholder" },
     stdio: "ignore",
   });
   await new Promise((resolve, reject) => {
