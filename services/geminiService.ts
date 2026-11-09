@@ -1,11 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { LocationInfo, SensorData, VisualStyle, CodexEntry } from "../types";
-
-const API_KEY = process.env.API_KEY || '';
-
-export const getGeminiClient = () => {
-  return new GoogleGenAI({ apiKey: API_KEY });
-};
 
 export const generateJsonFromPrompt = async (prompt: string, schemaString: string): Promise<string> => {
   const response = await fetch("/api/generate", {
@@ -164,27 +157,8 @@ export const chatWithGemini = async (message: string, history: { role: 'user' | 
   return typeof result.text === "string" && result.text ? result.text : "Uplink failed.";
 };
 
-export const getMapsGrounding = async (query: string, lat?: number, lng?: number): Promise<string> => {
-  const ai = getGeminiClient();
-  const config: any = {
-    tools: [{ googleMaps: {} }],
-  };
-  
-  if (lat !== undefined && lng !== undefined) {
-    config.toolConfig = {
-      retrievalConfig: {
-        latLng: { latitude: lat, longitude: lng }
-      }
-    };
-  }
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: query,
-    config
-  });
-  
-  return response.text || "No geographical data found.";
+export const getMapsGrounding = async (_query: string, _lat?: number, _lng?: number): Promise<string> => {
+  throw new Error("Maps grounding is temporarily unavailable while its server-side endpoint is secured.");
 };
 
 export const generateHighResImage = async (prompt: string, size: '1K' | '2K' | '4K', aspectRatio: string): Promise<string> => {
@@ -199,33 +173,8 @@ export const generateHighResImage = async (prompt: string, size: '1K' | '2K' | '
   return `data:${result.mimeType};base64,${result.image}`;
 };
 
-export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:16'): Promise<string> => {
-  const ai = getGeminiClient();
-  let operation = await ai.models.generateVideos({
-    model: 'veo-3.1-fast-generate-preview',
-    prompt: prompt,
-    config: {
-      numberOfVideos: 1,
-      resolution: '720p',
-      aspectRatio: aspectRatio
-    }
-  });
-
-  while (!operation.done) {
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    operation = await ai.operations.getVideosOperation({ operation: operation });
-  }
-
-  const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-  if (!downloadLink) throw new Error("Video generation failed.");
-  
-  const response = await fetch(downloadLink, {
-    method: 'GET',
-    headers: { 'x-goog-api-key': API_KEY },
-  });
-  
-  const blob = await response.blob();
-  return URL.createObjectURL(blob);
+export const generateVeoVideo = async (_prompt: string, _aspectRatio: '16:9' | '9:16'): Promise<string> => {
+  throw new Error("Video generation is disabled until a supported server-side generation and retrieval flow is implemented.");
 };
 
 export const getCodexEntries = async (query: string): Promise<CodexEntry[]> => {
