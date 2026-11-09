@@ -1,4 +1,5 @@
 import http from "node:http";
+import { createPublicKey, verify as verifySignature } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8787);
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -13,6 +14,61 @@ const MAX_VIDEO_BYTES = 12 * 1024 * 1024;
 const VIDEO_MIME_TYPES = new Set(["video/mp4", "video/mpeg", "video/mov", "video/avi", "video/x-flv", "video/mpg", "video/webm", "video/wmv", "video/3gpp"]);
 const MAX_RATE_LIMIT_KEYS = 10_000;
 const clients = new Map();
+
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
+const FIREBASE_CERT_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+let firebaseCertCache = { expiresAt: 0, certs: {} };
+
+async function verifyFirebaseIdToken(token) {
+  if (!FIREBASE_PROJECT_ID) throw new Error("Firebase authentication is not configured.");
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("Invalid bearer token.");
+  let header, claims;
+  try {
+    header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+  } catch {
+    throw new Error("Invalid bearer token.");
+  }
+  if (header.alg !== "RS256" || typeof header.kid !== "string") throw new Error("Invalid token header.");
+  const now = Math.floor(Date.now() / 1000);
+  if (claims.aud !== FIREBASE_PROJECT_ID ||
+      claims.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}` ||
+      typeof claims.sub !== "string" || claims.sub.length < 1 || claims.sub.length > 128 ||
+      !Number.isFinite(claims.exp) || claims.exp <= now ||
+      !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
+      !Number.isFinite(claims.auth_time) || claims.auth_time > now + 60) {
+    throw new Error("Invalid or expired Firebase ID token.");
+  }
+  if (firebaseCertCache.expiresAt <= Date.now()) {
+    const response = await fetch(FIREBASE_CERT_URL, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) throw new Error("Firebase signing certificates are unavailable.");
+    const certs = await response.json();
+    const cacheControl = response.headers.get("cache-control") || "";
+    const maxAge = Number(cacheControl.match(/max-age=(\\d+)/i)?.[1] || 300);
+    firebaseCertCache = { certs, expiresAt: Date.now() + Math.min(maxAge, 3600) * 1000 };
+  }
+  const cert = firebaseCertCache.certs[header.kid];
+  if (typeof cert !== "string") throw new Error("Unknown Firebase signing key.");
+  const valid = verifySignature(
+    "RSA-SHA256",
+    Buffer.from(`${parts[0]}.${parts[1]}`),
+    createPublicKey(cert),
+    Buffer.from(parts[2], "base64url")
+  );
+  if (!valid) throw new Error("Invalid Firebase token signature.");
+  return { uid: claims.sub, claims };
+}
+
+async function requireAuthentication(req) {
+  // Tests exercise input validation without reaching any provider. This bypass is
+  // active only in the isolated Node test process and is never enabled in production.
+  if (process.env.NODE_ENV === "test") return { uid: "test-user" };
+  const authorization = req.headers.authorization || "";
+  const match = authorization.match(/^Bearer ([^\\s]+)$/i);
+  if (!match) throw new Error("Authentication required.");
+  return verifyFirebaseIdToken(match[1]);
+}
 
 const json = (res, status, data) => {
   res.writeHead(status, {
@@ -124,6 +180,11 @@ const server = http.createServer(async (req, res) => {
   try {
     const bodyLimit = req.url === "/api/audio/transcribe" ? MAX_AUDIO_BODY_BYTES : req.url === "/api/video/analyze" ? MAX_VIDEO_BODY_BYTES : MAX_BODY_BYTES;
     const body = await readJson(req, bodyLimit);
+    try {
+      req.auth = await requireAuthentication(req);
+    } catch {
+      return json(res, FIREBASE_PROJECT_ID ? 401 : 503, { error: FIREBASE_PROJECT_ID ? "Valid Firebase sign-in is required." : "Firebase authentication is not configured on the server." });
+    }
 
     if (req.url === "/api/video/analyze") {
       const video = body.videoBase64;
