@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from '../types';
-import { chatWithGemini, generateHighResImage, generateVeoVideo } from '../services/geminiService';
+import { chatWithGemini, generateHighResImage } from '../services/geminiService';
 
 interface ChatBotProps {
   isOpen: boolean;
@@ -49,17 +49,6 @@ const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose }) => {
           text: `High-res render complete for: "${prompt}"`,
           timestamp: new Date().toLocaleTimeString(),
           media: { type: 'image', url }
-        };
-        setMessages(prev => [...prev, modelMsg]);
-      } else if (input.toLowerCase().startsWith('/video ')) {
-        const prompt = input.slice(7);
-        const url = await generateVeoVideo(prompt, '16:9');
-        const modelMsg: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'model',
-          text: `Video generation complete for: "${prompt}"`,
-          timestamp: new Date().toLocaleTimeString(),
-          media: { type: 'video', url }
         };
         setMessages(prev => [...prev, modelMsg]);
       } else {
@@ -147,7 +136,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose }) => {
             type="text" 
             value={input} 
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask RAI or use /render, /video..." 
+            placeholder="Ask RAI or use /render..." 
             className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-4 pr-10 py-2 text-xs focus:outline-none focus:border-cyan-500 transition-all text-cyan-100"
           />
           <button 
@@ -162,7 +151,6 @@ const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose }) => {
         </div>
         <div className="mt-2 flex gap-2 text-[7px] text-slate-600 uppercase font-mono">
           <span>/render [prompt]</span>
-          <span>/video [prompt]</span>
         </div>
       </form>
 
