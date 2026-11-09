@@ -1,53 +1,30 @@
 # Security notes
 
-## Current protections
+## Implemented protections in this branch
 
-- Never commit API keys, access tokens, or private credentials.
-- The backend foundation reads Gemini credentials only from the server runtime environment.
+- Gemini provider credentials are read by the Node.js server from `GEMINI_API_KEY`; Vite no longer injects API-key environment variables into the browser bundle.
+- Browser-side Gemini SDK initialization and the legacy Veo request/download flow have been removed from the frontend service.
+- The chat UI no longer advertises the legacy `/video` command.
+- The existing API validates request bodies and operation inputs, applies request timeouts, and avoids returning upstream provider error bodies.
 - Browser camera and microphone features must be started by an explicit user action and remain subject to browser permission prompts.
 - Location access must be opt-in and explain why coordinates are needed.
 - UI-generated sensor values and simulated bot motion are demonstrations, not verified hardware telemetry.
-- The included in-memory rate limiter is a starter control only. Production deployments need a shared rate-limit store, authentication where appropriate, HTTPS, monitoring, and provider spend limits.
 
-## Migration status: incomplete
+## Remaining security work — do not treat this branch as production-ready
 
-Four of the 14 reviewed Gemini operations now call the same-origin backend endpoint: `complexReasoning`, `processVoiceCommand`, `getCodexEntries`, and `generateLocationData`. The server selects each operation’s model and configuration and validates structured voice-command, Codex, and location-report output against fixed JSON schemas. Location report values are AI-generated estimates, not live sensor telemetry.
+- **Authentication is not yet integrated.** Firebase Authentication is the recommended identity provider for this app's web/Android direction. The app still needs Firebase client sign-in, server-side ID-token verification, authorization rules, and project-specific configuration. Until those are implemented, the generation API must not be exposed as a public production service.
+- The in-memory IP rate limiter is process-local and is not a production abuse-control boundary. Replace it with a shared store (for example, Redis or a managed rate-limit service) and configure trusted-proxy handling.
+- Add per-user quotas, provider spend caps, structured monitoring, alerting, HTTPS, and deployment-level request limits.
+- The Maps grounding operation is intentionally disabled in the browser until it is migrated to a server-owned endpoint.
+- Video generation is intentionally disabled. The legacy `veo-3.1-fast-generate-preview` flow must not be restored; implement and validate a supported server-side model/API flow before re-enabling it.
+- `@google/genai` may remain in the dependency lockfile until the dependency cleanup and lockfile are regenerated; it is no longer imported by the browser service.
 
-The remaining browser-side Gemini service still initializes `GoogleGenAI` from `process.env.API_KEY`. The Vite build configuration has historically exposed API-key environment values to browser code. This partial migration does not remove that exposure.
+## Gemini operation migration notes
 
-Do not deploy this branch as a completed secret-migration fix. Before public deployment:
+The app's remaining Gemini operations call same-origin server endpoints. The server must continue to own model selection, provider credentials, generation configuration, input validation, output limits, and upstream timeouts. Never accept a browser-supplied provider key or privileged model configuration.
 
-1. Move every remaining Gemini operation behind server-owned endpoints with a fixed operation allowlist and server-selected model/configuration.
-2. Validate each operation's inputs, MIME types, output sizes, and timeouts on the server. Never trust a browser-supplied model, schema, or generation configuration.
-3. Preserve the current service function contracts while replacing browser SDK calls with same-origin API requests.
-4. Cover text, structured JSON, location analysis, image generation, audio transcription and speech, video analysis, chat history, and Veo's long-running operation/poll/download flow.
-5. Remove the browser SDK dependency and Vite key definitions only after all call sites have migrated.
-6. Run type checks and a production build; inspect generated assets to confirm that no provider key or privileged credential is present.
+Maps grounding has no active caller in the reviewed source inventory and is disabled pending a server endpoint. Video generation is disabled pending a supported server-side implementation. AI-generated location reports are estimates, not live sensor telemetry.
 
-## Reviewed Gemini operation inventory (11 of 14 operations migrated; `getMapsGrounding` has no active caller)
+## Deployment gate
 
-- Structured extraction: `generateJsonFromPrompt` — migrated; server validates a restricted schema subset
-- Location report: `generateLocationData` — migrated to backend
-- Panorama image: `generate360View` — migrated to bounded server image endpoint
-- Video analysis: `analyzeVideo` — migrated to the Interactions API; inline uploads capped at 12MB and MIME allowlisted
-- Complex reasoning: `complexReasoning` — migrated to backend
-- Audio transcription: `transcribeAudio` — migrated to an 8MB-capped WAV endpoint
-- Speech synthesis: `generateSpeech` — migrated to server-side TTS with a 6,000-character input limit
-- Voice command parsing: `processVoiceCommand` — migrated to backend
-- Chat: `chatWithGemini` — migrated to backend
-- Maps grounding: `getMapsGrounding` — not migrated; no active caller identified in the reviewed source search
-- High-resolution image: `generateHighResImage` — migrated with server-validated size and aspect ratio
-- Video generation: `generateVeoVideo` — not migrated; the existing Veo 3.1 Preview model was shut down on 2026-10-22. Replace it with Gemini Omni Flash (`gemini-omni-1.1-flash`) using the Interactions API before enabling video generation.
-- Codex entries: `getCodexEntries` — migrated to backend
-- Classified-code narrative: `decryptClassifiedCode` — not migrated; AI-generated narrative only, not cryptographic decryption or authorization
-
-## Production hardening
-
-The process-local IP limiter is not suitable as a production abuse-control boundary: it resets on restart, is not shared across instances, and its client map is bounded only per process. Use a shared store and trusted-proxy-aware client identity. Add authentication/authorization, request quotas, provider spend caps, structured monitoring, and HTTPS before exposing generation endpoints publicly.
-
-
-## Video API migration notes
-
-- Short video analysis uses the Gemini Interactions API with `gemini-3.8-flash`; inline video is capped at 12MB and accepted MIME types are explicitly allowlisted.
-- Larger/longer video uploads require a separate managed File API flow; do not raise the inline request limit without revisiting the provider's request-size guidance.
-- The legacy `veo-3.1-fast-generate-preview` integration is intentionally not exposed because Veo 3.1 Preview was shut down on 2026-10-22. Video generation needs a separate migration to Gemini Omni Flash via Interactions API, including asynchronous status polling and server-controlled result retrieval.
+Do not deploy the API publicly until Firebase sign-in and server-side token verification are complete, shared rate limiting and quotas are configured, and a production build has been inspected to confirm that no provider key or privileged credential is present.
