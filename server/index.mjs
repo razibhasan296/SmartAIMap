@@ -45,7 +45,7 @@ async function verifyFirebaseIdToken(token) {
     if (!response.ok) throw new Error("Firebase signing certificates are unavailable.");
     const certs = await response.json();
     const cacheControl = response.headers.get("cache-control") || "";
-    const maxAge = Number(cacheControl.match(/max-age=(\\d+)/i)?.[1] || 300);
+    const maxAge = Number(cacheControl.match(/max-age=(\d+)/i)?.[1] || 300);
     firebaseCertCache = { certs, expiresAt: Date.now() + Math.min(maxAge, 3600) * 1000 };
   }
   const cert = firebaseCertCache.certs[header.kid];
@@ -65,7 +65,7 @@ async function requireAuthentication(req) {
   // active only in the isolated Node test process and is never enabled in production.
   if (process.env.NODE_ENV === "test") return { uid: "test-user" };
   const authorization = req.headers.authorization || "";
-  const match = authorization.match(/^Bearer ([^\\s]+)$/i);
+  const match = authorization.match(/^Bearer ([^\s]+)$/i);
   if (!match) throw new Error("Authentication required.");
   return verifyFirebaseIdToken(match[1]);
 }
