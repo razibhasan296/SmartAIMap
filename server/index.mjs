@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createPublicKey, verify as verifySignature } from "node:crypto";
+import { X509Certificate, verify as verifySignature } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 8787);
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -53,7 +53,7 @@ async function verifyFirebaseIdToken(token) {
   const valid = verifySignature(
     "RSA-SHA256",
     Buffer.from(`${parts[0]}.${parts[1]}`),
-    createPublicKey(cert),
+    new X509Certificate(cert).publicKey,
     Buffer.from(parts[2], "base64url")
   );
   if (!valid) throw new Error("Invalid Firebase token signature.");
@@ -63,7 +63,7 @@ async function verifyFirebaseIdToken(token) {
 async function requireAuthentication(req) {
   // Tests exercise input validation without reaching any provider. This bypass is
   // active only in the isolated Node test process and is never enabled in production.
-  if (process.env.NODE_ENV === "test") return { uid: "test-user" };
+  if (process.env.NODE_ENV === "test" && process.env.SMARTAIMAP_TEST_AUTH_BYPASS === "1") return { uid: "test-user" };
   const authorization = req.headers.authorization || "";
   const match = authorization.match(/^Bearer ([^\s]+)$/i);
   if (!match) throw new Error("Authentication required.");
