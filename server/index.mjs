@@ -173,6 +173,12 @@ const server = http.createServer(async (req, res) => {
     return json(res, 429, { error: "Rate limit exceeded. Try again shortly." });
   }
 
+    try {
+      req.auth = await requireAuthentication(req);
+    } catch {
+      return json(res, FIREBASE_PROJECT_ID ? 401 : 503, { error: FIREBASE_PROJECT_ID ? "Valid Firebase sign-in is required." : "Firebase authentication is not configured on the server." });
+    }
+
   if (!API_KEY) {
     return json(res, 503, { error: "AI service is not configured on the server." });
   }
@@ -180,12 +186,6 @@ const server = http.createServer(async (req, res) => {
   try {
     const bodyLimit = req.url === "/api/audio/transcribe" ? MAX_AUDIO_BODY_BYTES : req.url === "/api/video/analyze" ? MAX_VIDEO_BODY_BYTES : MAX_BODY_BYTES;
     const body = await readJson(req, bodyLimit);
-    try {
-      req.auth = await requireAuthentication(req);
-    } catch {
-      return json(res, FIREBASE_PROJECT_ID ? 401 : 503, { error: FIREBASE_PROJECT_ID ? "Valid Firebase sign-in is required." : "Firebase authentication is not configured on the server." });
-    }
-
     if (req.url === "/api/video/analyze") {
       const video = body.videoBase64;
       const mimeType = body.mimeType;
