@@ -12,7 +12,7 @@
 
 ## Remaining security work — do not treat this branch as production-ready
 
-- **Authentication is not yet integrated.** Firebase Authentication is the recommended identity provider for this app's web/Android direction. The app still needs Firebase client sign-in, server-side ID-token verification, authorization rules, and project-specific configuration. Until those are implemented, the generation API must not be exposed as a public production service.
+- **Authentication enforcement is implemented on the API.** Every supported POST endpoint now requires a Firebase ID token in `Authorization: Bearer <token>`. The Node.js server validates the RS256 signature against Google's published Secure Token certificates and checks issuer, audience, subject, and token timestamps. Configure `FIREBASE_PROJECT_ID` in the server runtime. The frontend sign-in flow and per-user authorization/roles are not yet implemented; clients must obtain Firebase ID tokens through a trusted sign-in integration before calling the API.
 - The in-memory IP rate limiter is process-local and is not a production abuse-control boundary. Replace it with a shared store (for example, Redis or a managed rate-limit service) and configure trusted-proxy handling.
 - Add per-user quotas, provider spend caps, structured monitoring, alerting, HTTPS, and deployment-level request limits.
 - The Maps grounding operation is intentionally disabled in the browser until it is migrated to a server-owned endpoint.
@@ -27,4 +27,4 @@ Maps grounding has no active caller in the reviewed source inventory and is disa
 
 ## Deployment gate
 
-Do not deploy the API publicly until Firebase sign-in and server-side token verification are complete, shared rate limiting and quotas are configured, and a production build has been inspected to confirm that no provider key or privileged credential is present.
+Do not deploy as a finished production service until the Firebase client sign-in flow is integrated, `FIREBASE_PROJECT_ID` is configured, shared rate limiting and per-user quotas are configured, and a production build has been inspected to confirm that no provider key or privileged credential is present. The test-only authentication bypass is enabled exclusively when `NODE_ENV=test`; never set that value in a deployed runtime.
